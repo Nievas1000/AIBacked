@@ -30,5 +30,5 @@ This is a **secure and scalable backend** built with **Node.js** and **Express**
 
 ### 1️⃣ **Clone the Repository**
 ```bash
-git clone https://github.com/your-username/medical-chatbot-api.git
-cd medical-chatbot-api
+git clone https://github.com/Nievas1000/AIBacked
+cd AIBacked
