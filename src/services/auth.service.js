@@ -1,5 +1,5 @@
 const supabase = require('../config/supabase')
-const bcrypt = require('bcryptjs')
+const passwordUtils = require('../utils/passwordUtils.js')
 
 exports.registerUser = async (name, email, phone, role, password) => {
   try {
@@ -11,18 +11,18 @@ exports.registerUser = async (name, email, phone, role, password) => {
 
     if (existingUser) throw new Error('Email already registered')
 
-    const salt = await bcrypt.genSalt(10)
-    const hashedPassword = await bcrypt.hash(password, salt)
+    const hashedPassword = await passwordUtils.hashPassword(password)
 
     const { data, error } = await supabase
       .from('admin_users')
       .insert([{ name, email, phone, role, password_hash: hashedPassword }])
+      .select()
 
-    if (error) throw new Error(error.message)
+    if (error) throw new Error('Error creating user')
 
     return data
   } catch (error) {
-    throw new Error(`RegisterUser Service Error: ${error.message}`)
+    throw new Error('Authentication service error')
   }
 }
 
@@ -36,11 +36,11 @@ exports.loginUser = async (email, password) => {
 
     if (!user) throw new Error('Invalid email or password')
 
-    const isMatch = await bcrypt.compare(password, user.password_hash)
+    const isMatch = await passwordUtils.comparePassword(password, user.password_hash)
     if (!isMatch) throw new Error('Invalid email or password')
 
     return user
   } catch (error) {
-    throw new Error(`LoginUser Service Error: ${error.message}`)
+    throw new Error('Authentication service error')
   }
 }

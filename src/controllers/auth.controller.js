@@ -1,5 +1,5 @@
 const authService = require('../services/auth.service')
-const jwt = require('jsonwebtoken')
+const jwtUtils = require('../utils/jwtUtils.js')
 
 exports.register = async (req, res, next) => {
   try {
@@ -16,11 +16,7 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body
     const user = await authService.loginUser(email, password)
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    )
+    const token = jwtUtils.generateToken(user)
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -38,4 +34,8 @@ exports.login = async (req, res, next) => {
 exports.logout = (req, res) => {
   res.clearCookie('token')
   res.json({ message: 'Logged out successfully' })
+}
+
+exports.getCurrentUser = (req, res) => {
+  res.json({ user: req.user })
 }

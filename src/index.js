@@ -1,9 +1,8 @@
 const express = require('express')
+const cookieParser = require('cookie-parser')
 const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
-const cookieParser = require('cookie-parser')
-const authRoutes = require('./routes/auth.route')
 const errorHandler = require('./middlewares/error.middleware')
 
 require('dotenv').config()
@@ -11,12 +10,18 @@ require('dotenv').config()
 const app = express()
 
 app.use(express.json())
+app.use(cookieParser())
 app.use(cors({ credentials: true, origin: 'http://localhost:3000' }))
 app.use(helmet())
 app.use(morgan('dev'))
-app.use(cookieParser())
 
-app.use('/api/auth', authRoutes)
+app.use('/api/auth', require('./routes/auth.route'))
+app.use('/api/clinics', require('./routes/clinics.route'))
+app.use('/api/doctors', require('./routes/doctors.route'))
+app.use('/api/patients', require('./routes/patients.route'))
+app.use('/api/appointments', require('./routes/appointments.route'))
+app.use('/api/chat', require('./routes/chat.route'))
+app.use('/api/faqs', require('./routes/faqs.route'))
 
 app.use(errorHandler)
 
