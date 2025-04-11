@@ -32,8 +32,46 @@ exports.webchatMessage = async (req, res, next) => {
       message,
       clinicId
     )
+    res.status(200).json(response)
+  } catch (error) {
+    next(error)
+  }
+}
 
-    res.status(200).json(response.data)
+exports.saveChatbotSettings = async (req, res, next) => {
+  const { clinicId, settings } = req.body
+
+  if (!clinicId || !settings) {
+    return res.status(400).json({ message: 'Missing clinicId or settings' })
+  }
+
+  try {
+    const response = await chatService.saveSettings(clinicId, settings)
+    return res.status(200).json(response)
+  } catch (error) {
+    next(error)
+  }
+}
+
+exports.getChatbotSettings = async (req, res, next) => {
+  const { clinicId } = req.params
+
+  if (!clinicId) {
+    return res.status(400).json({ message: 'Missing clinicId' })
+  }
+
+  try {
+    const response = await chatService.getSettings(clinicId)
+    return res.status(200).json(response)
+  } catch (error) {
+    next(error)
+  }
+}
+
+exports.uploadChatbotAvatar = async (req, res, next) => {
+  try {
+    const response = await chatService.uploadAvatar(req)
+    return res.status(200).json(response)
   } catch (error) {
     next(error)
   }

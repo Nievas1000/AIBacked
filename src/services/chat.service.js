@@ -105,7 +105,7 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone) => {
 
   try {
     const response = await axios.post(
-      'http://127.0.0.1:5678/webhook-test/b1da9c1e-0a08-4380-9f7d-0acaaad6f8d7',
+      'http://127.0.0.1:5678/webhook/b1da9c1e-0a08-4380-9f7d-0acaaad6f8d7',
       {
         patient_id: patientId,
         clinic_id: clinicId,
@@ -131,8 +131,59 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone) => {
 
     if (botMsgError) throw new Error('Error saving bot response')
 
-    return response
+    return {
+      data: response.data.data,
+      conversationId: conversation.id
+    }
   } catch (err) {
     throw new Error('Failed to communicate with AI agent')
   }
+}
+
+exports.saveSettings = async (clinicId, settings) => {
+  const { data, error } = await supabase
+    .from('chatbot_settings')
+    .upsert({ clinic_id: clinicId, settings }, { onConflict: 'clinic_id' })
+    .select()
+    .single()
+
+  if (error) throw new Error('Failed to save chatbot settings')
+  return data
+}
+
+exports.getSettings = async (clinicId) => {
+  const { data, error } = await supabase
+    .from('chatbot_settings')
+    .select('settings')
+    .eq('clinic_id', clinicId)
+    .single()
+
+  if (error || !data) throw new Error('No settings found for clinic')
+  return data
+}
+
+exports.uploadAvatar = async (req) => {
+  const clinicId = req.body.clinic_id
+  const file = req.file
+
+  if (!clinicId || !file) {
+    throw new Error('Missing clinic_id or file')
+  }
+
+  const filename = `avatars/${clinicId}-${new Date()}-${file.originalname}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('chatbot-assets')
+    .upload(filename, file.buffer, {
+      contentType: file.mimetype,
+      upsert: true
+    })
+
+  if (uploadError) throw new Error('Failed to upload image to storage')
+
+  const { data: publicUrl } = supabase.storage
+    .from('chatbot-assets')
+    .getPublicUrl(filename)
+
+  return { url: publicUrl.publicUrl }
 }
