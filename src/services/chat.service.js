@@ -28,7 +28,7 @@ exports.getConversationById = async (conversationId) => {
   return messages
 }
 
-exports.handleWebchatMessage = async (patientId, message, clinicPhone) => {
+exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = false) => {
   const { data: clinic, error: clinicError } = await supabase
     .from('clinics')
     .select('*')
@@ -91,17 +91,47 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone) => {
 
     conversation = newConversation
   }
+
+  const sender = isBot ? 'bot' : 'patient'
+
   const { error: patientMsgError } = await supabase.from('messages').insert([
     {
       clinic_id: clinicId,
       session_id: conversation.id,
-      sender: 'patient',
+      sender,
       message,
       origin: 'webchat'
     }
   ])
 
   if (patientMsgError) throw new Error('Error saving patient message')
+
+  if (isBot) {
+    const messageObject = {
+      type: 'ai',
+      content: message,
+      tool_calls: [],
+      additional_kwargs: {},
+      response_metadata: {},
+      invalid_tool_calls: []
+    }
+
+    const { error: historyError } = await supabase
+      .from('n8n_chat_histories')
+      .insert([
+        {
+          session_id: conversation.id,
+          message: messageObject
+        }
+      ])
+
+    if (historyError) throw new Error('Error saving welcome message to chat history')
+
+    return {
+      data: message,
+      conversationId: conversation.id
+    }
+  }
 
   try {
     const response = await axios.post(
@@ -162,28 +192,54 @@ exports.getSettings = async (clinicId) => {
   return data
 }
 
-exports.uploadAvatar = async (req) => {
-  const clinicId = req.body.clinic_id
-  const file = req.file
+exports.uploadAvatarToStorage = async (file, clinicId) => {
+  const buffer = file.buffer
+  const fileExt = file.originalname.split('.').pop()
+  const fileName = `${clinicId}/avatar.${fileExt}`
 
-  if (!clinicId || !file) {
-    throw new Error('Missing clinic_id or file')
-  }
-
-  const filename = `avatars/${clinicId}-${new Date()}-${file.originalname}`
-
-  const { error: uploadError } = await supabase.storage
+  const { error } = await supabase.storage
     .from('chatbot-assets')
-    .upload(filename, file.buffer, {
+    .upload(fileName, buffer, {
       contentType: file.mimetype,
-      upsert: true
+      upsert: true // 🧽 reemplaza si ya existe
     })
 
-  if (uploadError) throw new Error('Failed to upload image to storage')
+  if (error) throw new Error('Error uploading file to storage')
 
-  const { data: publicUrl } = supabase.storage
+  const { data: publicUrl } = supabase
+    .storage
     .from('chatbot-assets')
-    .getPublicUrl(filename)
+    .getPublicUrl(fileName)
 
-  return { url: publicUrl.publicUrl }
+  return publicUrl.publicUrl
+}
+
+exports.addDomain = async (clinicId, domain) => {
+  const { data, error } = await supabase
+    .from('chatbot_allowed_domains')
+    .insert([{ clinic_id: clinicId, domain }])
+
+  if (error) throw new Error('Error adding domain')
+  return data
+}
+
+exports.getDomains = async (clinicId) => {
+  const { data, error } = await supabase
+    .from('chatbot_allowed_domains')
+    .select('domain')
+    .eq('clinic_id', clinicId)
+
+  if (error) throw new Error('Error fetching domains')
+  return data[0]
+}
+
+exports.deleteDomain = async (clinicId, domain) => {
+  const { error } = await supabase
+    .from('chatbot_allowed_domains')
+    .delete()
+    .eq('clinic_id', clinicId)
+    .eq('domain', domain)
+
+  if (error) throw new Error('Error deleting domain')
+  return { success: true }
 }

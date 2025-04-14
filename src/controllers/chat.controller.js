@@ -20,7 +20,7 @@ exports.getConversationById = async (req, res, next) => {
 }
 
 exports.webchatMessage = async (req, res, next) => {
-  const { id, message, clinicId } = req.body
+  const { id, message, clinicId, isBot = false } = req.body
 
   if (!id || !message || !clinicId) {
     return res.status(400).json({ message: 'Missing required fields' })
@@ -30,7 +30,8 @@ exports.webchatMessage = async (req, res, next) => {
     const response = await chatService.handleWebchatMessage(
       id,
       message,
-      clinicId
+      clinicId,
+      isBot
     )
     res.status(200).json(response)
   } catch (error) {
@@ -40,7 +41,6 @@ exports.webchatMessage = async (req, res, next) => {
 
 exports.saveChatbotSettings = async (req, res, next) => {
   const { clinicId, settings } = req.body
-
   if (!clinicId || !settings) {
     return res.status(400).json({ message: 'Missing clinicId or settings' })
   }
@@ -68,11 +68,50 @@ exports.getChatbotSettings = async (req, res, next) => {
   }
 }
 
-exports.uploadChatbotAvatar = async (req, res, next) => {
+exports.uploadAvatar = async (req, res, next) => {
+  const { clinicId } = req.body
+  const file = req.file
+
+  if (!clinicId || !file) {
+    return res.status(400).json({ message: 'Missing required fields' })
+  }
+
   try {
-    const response = await chatService.uploadAvatar(req)
-    return res.status(200).json(response)
-  } catch (error) {
-    next(error)
+    const url = await chatService.uploadAvatarToStorage(file, clinicId)
+    return res.status(200).json({ url })
+  } catch (err) {
+    next(err)
+  }
+}
+
+exports.addAllowedDomain = async (req, res, next) => {
+  const { clinicId, domain } = req.body
+  if (!clinicId || !domain) return res.status(400).json({ message: 'Missing data' })
+
+  try {
+    const response = await chatService.addDomain(clinicId, domain)
+    res.status(200).json(response)
+  } catch (err) {
+    next(err)
+  }
+}
+
+exports.getAllowedDomains = async (req, res, next) => {
+  const { clinicId } = req.params
+  try {
+    const response = await chatService.getDomains(clinicId)
+    res.status(200).json(response)
+  } catch (err) {
+    next(err)
+  }
+}
+
+exports.removeAllowedDomain = async (req, res, next) => {
+  const { clinicId, domain } = req.params
+  try {
+    const response = await chatService.deleteDomain(clinicId, domain)
+    res.status(200).json(response)
+  } catch (err) {
+    next(err)
   }
 }

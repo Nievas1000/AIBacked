@@ -4,6 +4,7 @@ const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
 const errorHandler = require('./middlewares/error.middleware')
+const corsOptionsDelegate = require('./middlewares/cors.middleware')
 
 require('dotenv').config()
 
@@ -11,7 +12,7 @@ const app = express()
 
 app.use(express.json())
 app.use(cookieParser())
-app.use(cors({ credentials: true, origin: 'http://localhost:3000' }))
+app.use(cors(corsOptionsDelegate));
 app.use(helmet())
 app.use(morgan('dev'))
 
