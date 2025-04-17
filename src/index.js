@@ -12,7 +12,7 @@ const app = express()
 
 app.use(express.json())
 app.use(cookieParser())
-app.use(cors(corsOptionsDelegate));
+app.use(cors(corsOptionsDelegate))
 app.use(helmet())
 app.use(morgan('dev'))
 

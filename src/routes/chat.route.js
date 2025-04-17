@@ -14,4 +14,9 @@ router.post('/domains', chatController.addAllowedDomain)
 router.get('/domains/:clinicId', chatController.getAllowedDomains)
 router.delete('/domains/:clinicId/:domain', chatController.removeAllowedDomain)
 
+/* Whatsapp */
+router.post('/whatsapp/generate-qr', chatController.generateWhatsappQR)
+router.delete('/whatsapp/delete-instance/:instanceId', chatController.deleteWhatsappInstance)
+router.post('/whatsapp/instance/update', chatController.saveOrUpdateWhatsappInstance)
+
 module.exports = router

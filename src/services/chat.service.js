@@ -28,7 +28,7 @@ exports.getConversationById = async (conversationId) => {
   return messages
 }
 
-exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = false) => {
+exports.handleWebchatMessage = async (patientId, message, clinicPhone) => {
   const { data: clinic, error: clinicError } = await supabase
     .from('clinics')
     .select('*')
@@ -40,6 +40,18 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = f
   }
 
   const clinicId = clinic.id
+
+  const { data: settingsData, error: settingsError } = await supabase
+    .from('chatbot_settings')
+    .select('settings')
+    .eq('clinic_id', clinicPhone)
+    .single()
+
+  if (settingsError || !settingsData) {
+    throw new Error('Failed to load chatbot settings')
+  }
+
+  const welcomeMessage = settingsData.settings?.welcomeMessage || null
 
   const { data: patient, error: patientError } = await supabase
     .from('patients')
@@ -92,46 +104,16 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = f
     conversation = newConversation
   }
 
-  const sender = isBot ? 'bot' : 'patient'
-
   const { error: patientMsgError } = await supabase.from('messages').insert([
     {
       clinic_id: clinicId,
       session_id: conversation.id,
-      sender,
+      sender: 'patient',
       message,
       origin: 'webchat'
     }
   ])
-
   if (patientMsgError) throw new Error('Error saving patient message')
-
-  if (isBot) {
-    const messageObject = {
-      type: 'ai',
-      content: message,
-      tool_calls: [],
-      additional_kwargs: {},
-      response_metadata: {},
-      invalid_tool_calls: []
-    }
-
-    const { error: historyError } = await supabase
-      .from('n8n_chat_histories')
-      .insert([
-        {
-          session_id: conversation.id,
-          message: messageObject
-        }
-      ])
-
-    if (historyError) throw new Error('Error saving welcome message to chat history')
-
-    return {
-      data: message,
-      conversationId: conversation.id
-    }
-  }
 
   try {
     const response = await axios.post(
@@ -141,7 +123,8 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = f
         clinic_id: clinicId,
         message,
         source: 'webchat',
-        sessionId: conversation.id
+        sessionId: conversation.id,
+        welcomeMessage
       }
     )
 
@@ -166,6 +149,7 @@ exports.handleWebchatMessage = async (patientId, message, clinicPhone, isBot = f
       conversationId: conversation.id
     }
   } catch (err) {
+    console.log(err)
     throw new Error('Failed to communicate with AI agent')
   }
 }
@@ -242,4 +226,103 @@ exports.deleteDomain = async (clinicId, domain) => {
 
   if (error) throw new Error('Error deleting domain')
   return { success: true }
+}
+
+exports.getWhatsappQR = async (clientId) => {
+  try {
+    const responseCreate = await axios.post(
+      `${process.env.EVOLUTION_API_URL}/instance/create`,
+      {
+        instanceName: `client-${clientId}`,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+        websocket_enabled: true,
+        websocket_events: ['QRCODE_UPDATED', 'CONNECTION_UPDATE']
+      },
+      {
+        headers: {
+          apikey: process.env.EVOLUTION_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    const base64 = responseCreate.data?.qrcode?.base64
+    const instanceId = responseCreate.data?.instance?.instanceId
+    const instanceName = responseCreate.data?.instance?.instanceName
+
+    if (!base64 || !instanceId || !instanceName) {
+      throw new Error('QR code not returned from Evolution API')
+    }
+
+    return {
+      instanceId,
+      instanceName,
+      qr: base64
+    }
+  } catch (error) {
+    console.error('Error fetching WhatsApp QR:', error.message)
+    throw new Error('Failed to retrieve QR code')
+  }
+}
+
+exports.deleteWhatsappInstance = async (instanceId) => {
+  const url = `${process.env.EVOLUTION_API_URL}/instance/delete/${instanceId}`
+
+  const response = await axios.delete(url, {
+    headers: {
+      apikey: process.env.EVOLUTION_API_KEY
+    }
+  })
+
+  return response.data
+}
+
+exports.saveOrUpdateWhatsappInstance = async ({ clinicId, instanceId, phone, instanceName, state, connectedAt, disconnectedAt }) => {
+  const { data: existing, error: findError } = await supabase
+    .from('whatsapp_instances')
+    .select('*')
+    .eq('clinic_id', clinicId)
+    .single()
+
+  if (findError && findError.code !== 'PGRST116') {
+    throw new Error('Error buscando instancia existente')
+  }
+
+  if (existing) {
+    const { data, error: updateError } = await supabase
+      .from('whatsapp_instances')
+      .update({
+        instance_id: instanceId,
+        phone,
+        instance_name: instanceName,
+        state,
+        connected_at: connectedAt,
+        disconnected_at: disconnectedAt
+      })
+      .eq('clinic_id', clinicId)
+      .select()
+      .single()
+
+    if (updateError) throw new Error('Error actualizando instancia')
+
+    return data
+  } else {
+    const { data, error: insertError } = await supabase
+      .from('whatsapp_instances')
+      .insert([{
+        clinic_id: clinicId,
+        instance_id: instanceId,
+        phone,
+        instance_name: instanceName,
+        state,
+        connected_at: connectedAt,
+        disconnected_at: disconnectedAt
+      }])
+      .select()
+      .single()
+
+    if (insertError) throw new Error('Error insertando nueva instancia')
+
+    return data
+  }
 }
